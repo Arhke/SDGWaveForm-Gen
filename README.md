@@ -1,2 +1,2 @@
 # SDGWaveForm-Gen
-Arbitrary WaveForm Generator for the Steven Connolly Lab
+Arbitrary WaveForm Generator program for the SDG 2042x for the Steven Connolly Lab
