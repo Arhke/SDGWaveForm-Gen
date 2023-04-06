@@ -1,49 +1,8 @@
-import socket
-import sys
-import time
 import binascii
+import pyvisa as visa
 
-remote_ip = "192.168.1.251"
-port = 5025
-count = 0
 
 wave_points = [0x8000, 0x3f06]
-
-
-def SocketConnect():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    except socket.error:
-        print('Fail to creat socket.')
-        sys.exet();
-    try:
-        s.connect((remote_ip, port))
-    except socket.error:
-        print('failed to connect to ip' + remote_ip)
-    return s
-
-def SocketQuery(Sock, cmd):
-    try:
-        Sock.sendall(cmd)
-        time.sleep(1)
-    except socket.error:
-        print('Send failed')
-        sys.exit()
-    reply = Sock.recv(4096)
-    return reply
-
-def SocketSend(Sock, cmd):
-    try:
-        cmd = cmd + '\n'
-        Sock.sendall(cmd.encode('latin1'))
-        time.sleep(1)
-    except socket.error:
-        print('Send failed.')
-        sys.exit()
-
-def SocketClose(Sock):
-    Sock.close()
-    time.sleep(.300)
 
 def create_wave_file():
     f = open('wave1.bin','wb')
@@ -65,28 +24,62 @@ def create_wave_file():
 
 
 def main():
-    global remote_ip
-    global port
-    global count
 
-    create_wave_file()
-    s = SocketConnect()
+    rm = visa.ResourceManager()
+    inst = None
+    if len(rm.list_resources()) == 0:
+    	print("No Devices Attatched, Check USB Cable")
+    	return
+    else:
+    	if not len(rm.list_resources()) == 1:
+    		print(rm.list_resources())
+    		deviceName = input("Enter device name(from list above):")
+    	for resource in rm.list_resources():
+    		if not len(rm.list_resources()) == 1 and not deviceName in resource:
+    			continue
+    		inst = rm.open_resource(resource)
+    		if not "SDG2042X" in inst.query('*IDN?'):
+    			print("Incorrect device attatched.")
+    			return
+    		else:
+    			break 
+    type = input("Please type (Demo, File, or Manual): ").lower()
+    values = None  
+    if type == "demo":
+    	create_wave_file()
+    	f = open('wave1.bin', 'rb')
+    	data = f.read().decode('latin1')
+    	values = [ord(c) for c in data]
+    	f.close()
+    elif type == "file":
+
+    	file = input("Please input file name: ")
+    	f = None
+    	try:
+    	    f = open(file, 'rb')
+    	except FileNotFoundError:
+    		print("Oops! Invalid file.", end="")
+    		return
+    	data = f.read().decode('latin1')
+    	values = [ord(c) for c in data]
+    	f.close()
+    else:
+    	values = []
+    	i = 0
+    	while True:
+    		value = input("Index %d (\'stop\' to end): "%(i))	
+    		if len(value) == 0 or value.lower() == "stop":
+    			break
+    		if not value.isdigit():
+    			print("Please input a number! \"%s\" is not a valid number."%(value))
+    			continue
+    		i+=1
+    		values.append(int(value))
+    print('Sending waveform...', end="")
     
-    f = open('wave1.bin', 'rb')
-    data = f.read().decode('latin1')
-    data1 = data.encode('latin1')
-    with open('wave2.bin', 'wb') as f1:
-        f1.write(data1)
+    inst.write_ascii_values('C1:WVDT WVNM,wave1,WAVEDATA,', values)
+    inst.write_ascii_values('C1:ARWV NAME,wave1', {})
     
-    print('write bytes:', len(data))
-    
-    data = str(data)
-    
-    SocketSend(s,"C1:WVDT WVNM,wave1,FREQ,2000.0,AMPL,3.0,OFST,0.0,PHASE,0.0,WAVEDATA,%s"%(data))
-    SocketSend(s,'C1:ARWV NAME,wave1')
-    f.close()
-    SocketClose(s)
-    print('Exit.')
 
 if __name__ == '__main__':
     proc = main()
